@@ -1,0 +1,22 @@
+name: Keep Supabase Active
+
+on:
+  schedule:
+    - cron: '0 0 */3 * *' # 每 3 天运行一次 (UTC 时间 00:00)
+  workflow_dispatch: # 支持在 GitHub 界面手动触发测试
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Heartbeat to Supabase
+        run: |
+          # 往 conversations 表插入一条数据来产生数据库活动
+          curl -i -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/conversations" \
+          -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+          -H "Content-Type: application/json" \
+          -H "Prefer: return=minimal" \
+          -d '{"title": "System Heartbeat (Auto-generated)"}'
+          
+          echo "Heartbeat sent successfully."

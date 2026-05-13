@@ -1,61 +1,150 @@
-<script setup>
-const client = useSupabaseClient()
-const newMessage = ref('')
+<script setup lang="ts">
+import type { ChatMessage } from '~/types/chat'
 
-// 1. 获取消息列表（保持之前的逻辑，但增加实时刷新）
-const { data: messages, refresh } = await useAsyncData('messages', async () => {
-  const { data } = await client.from('messages').select('*').order('created_at', { ascending: true })
-  return data
+const {
+  conversations,
+  activeConversationId,
+  messages,
+  isStreaming,
+  streamingContent,
+  fetchConversations,
+  createConversation,
+  deleteConversation,
+  renameConversation,
+  switchConversation,
+  sendMessage,
+} = useChat()
+
+const sidebarOpen = ref(false)
+const messagesContainerRef = ref<HTMLElement | null>(null)
+const initialized = ref(false)
+
+// 客户端初始化，避免 SSR 水合不匹配
+onMounted(async () => {
+  await fetchConversations()
+  if (conversations.value.length > 0 && !activeConversationId.value) {
+    await switchConversation(conversations.value[0].id)
+  }
+  initialized.value = true
 })
 
-// 2. 发送消息的函数
-const sendMessage = async () => {
-  if (!newMessage.value.trim()) return
-
-  // A. 先把用户的消息存入数据库
-  const { error } = await client.from('messages').insert([
-    { role: 'user', content: newMessage.value }
-  ])
-
-  if (!error) {
-    const userPrompt = newMessage.value
-    newMessage.value = '' // 清空输入框
-    await refresh() // 刷新页面列表
-
-    // B. 调用我们即将创建的 AI 接口
-    await callAI(userPrompt)
-  }
-}
-
-// 3. 调用 AI 的函数（目前先占位，等第二步写完后端接口）
-const callAI = async (prompt) => {
-  const { data } = await $fetch('/api/chat', {
-    method: 'POST',
-    body: { prompt }
+function scrollToBottom() {
+  nextTick(() => {
+    const container = messagesContainerRef.value
+    if (container) {
+      container.scrollTop = container.scrollHeight
+    }
   })
-
-  // AI 回复后再次刷新列表
-  await refresh()
 }
+
+watch(messages, scrollToBottom, { deep: true })
+watch(streamingContent, scrollToBottom)
+
+async function handleNewChat() {
+  await createConversation()
+  sidebarOpen.value = false
+}
+
+async function handleSelectConversation(id: string) {
+  await switchConversation(id)
+  sidebarOpen.value = false
+}
+
+async function handleDelete(id: string) {
+  await deleteConversation(id)
+}
+
+async function handleRename(id: string, title: string) {
+  await renameConversation(id, title)
+}
+
+function handleSelectPrompt(prompt: string) {
+  sendMessage(prompt)
+}
+
+function handleSend(content: string) {
+  sendMessage(content)
+}
+
+const hasMessages = computed(() => messages.value.length > 0)
+
+/** 构造流式占位消息对象 */
+const streamingPlaceholder = computed<ChatMessage | null>(() => {
+  if (!isStreaming.value || !streamingContent.value) return null
+  return {
+    id: 'streaming',
+    conversation_id: activeConversationId.value || '',
+    role: 'assistant',
+    content: streamingContent.value,
+    created_at: new Date().toISOString(),
+  }
+})
 </script>
 
 <template>
-  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <h1>我的 AI Agent 🚀</h1>
+  <div class="chat-layout">
+    <!-- 移动端遮罩 -->
+    <div
+      class="chat-sidebar-overlay"
+      :class="{ visible: sidebarOpen }"
+      @click="sidebarOpen = false"
+    />
 
-    <div style="border: 1px solid #ddd; height: 400px; overflow-y: auto; padding: 10px; margin-bottom: 20px;">
-      <div v-for="msg in messages" :key="msg.id"
-        :style="{ textAlign: msg.role === 'user' ? 'right' : 'left', marginBottom: '10px' }">
-        <div
-          :style="{ display: 'inline-block', padding: '8px 12px', borderRadius: '10px', backgroundColor: msg.role === 'user' ? '#007bff' : '#f1f1f1', color: msg.role === 'user' ? 'white' : 'black' }">
-          {{ msg.content }}
+    <!-- 移动端汉堡按钮 -->
+    <button class="chat-mobile-toggle" @click="sidebarOpen = !sidebarOpen">
+      ☰
+    </button>
+
+    <!-- 侧边栏 -->
+    <ChatSidebar
+      :conversations="conversations"
+      :active-id="activeConversationId"
+      :is-open="sidebarOpen"
+      @new-chat="handleNewChat"
+      @select="handleSelectConversation"
+      @delete="handleDelete"
+      @rename="handleRename"
+      @close="sidebarOpen = false"
+    />
+
+    <!-- 主聊天区 -->
+    <main class="chat-main">
+      <!-- 消息列表 / 欢迎页 -->
+      <template v-if="hasMessages">
+        <div ref="messagesContainerRef" class="chat-messages-container">
+          <div class="chat-messages-inner">
+            <ChatMessageBubble
+              v-for="msg in messages"
+              :key="msg.id"
+              :message="msg"
+            />
+
+            <!-- 流式输出中的占位消息 -->
+            <ChatMessageBubble
+              v-if="streamingPlaceholder"
+              :message="streamingPlaceholder"
+              :is-streaming="true"
+              :streaming-content="streamingContent"
+            />
+
+            <!-- AI 思考中的加载动画 -->
+            <div v-if="isStreaming && !streamingContent" class="chat-message">
+              <div class="chat-message-avatar assistant">A</div>
+              <div class="chat-message-body">
+                <div class="chat-message-role">AI</div>
+                <div class="chat-loading-dots">
+                  <span /><span /><span />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </template>
 
-    <div style="display: flex; gap: 10px;">
-      <input v-model="newMessage" @keyup.enter="sendMessage" placeholder="输入消息..." style="flex: 1; padding: 8px;" />
-      <button @click="sendMessage">发送</button>
-    </div>
+      <ChatWelcome v-else @select-prompt="handleSelectPrompt" />
+
+      <!-- 输入区：不禁用 textarea，允许在 AI 回复时预输入 -->
+      <ChatInput @send="handleSend" />
+    </main>
   </div>
 </template>

@@ -1,75 +1,24 @@
-# Nuxt Minimal Starter
+# My Backend Agent
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+基于 Nuxt 3 开发的智能对话代理（AI Agent）系统，集成了 DeepSeek AI 模型，并使用 Supabase 持久化。
 
-## Setup
+## 📖 项目文档 (Documentation)
 
-Make sure to install dependencies:
+详细的架构、API和部署说明，请参阅 `docs` 目录：
+
+- [快速入门与概览 (Overview)](./docs/README.md)
+- [API 接口文档 (API)](./docs/api.md)
+- [数据库设计与迁移 (Database)](./docs/database.md)
+- [部署与自动化运维 (Deployment)](./docs/deployment.md)
+
+---
+
+## 💻 快速开始
 
 ```bash
-# npm
-npm install
-
-# pnpm
+# 1. 安装依赖
 pnpm install
 
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
-npm run dev
-
-# pnpm
+# 2. 启动开发服务器
 pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
-
-## Production
-
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.

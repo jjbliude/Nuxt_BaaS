@@ -1,4 +1,4 @@
-import { serverSupabaseClient } from '#supabase/server'
+import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 
 interface DeepSeekStreamChoice {
   delta: { content?: string }
@@ -10,6 +10,12 @@ interface DeepSeekStreamChunk {
 }
 
 export default defineEventHandler(async (event) => {
+  const user = await serverSupabaseUser(event)
+  if (!user) {
+    throw createError({ statusCode: 401, message: '未认证' })
+  }
+  const userId = user.id || (user as any).sub || (user as any).user?.id || (user as any).value?.id;
+
   const body = await readBody(event)
   const { prompt, conversationId } = body
 
@@ -22,19 +28,21 @@ export default defineEventHandler(async (event) => {
 
   const db = await serverSupabaseClient(event)
 
-  // 存储用户消息
+  // 存储用户消息，user_id 由数据库自动填充
   await db.from('messages').insert([
     { role: 'user', content: prompt, conversation_id: conversationId },
   ])
 
-  // 加载该对话的历史消息作为上下文（最近 20 条）
+  // 加载该对话的历史消息作为上下文（最近 20 条），加入 user_id 校验
   const { data: historyMessages } = await db
     .from('messages')
     .select('role, content')
     .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
     .order('created_at', { ascending: true })
     .limit(20)
 
+  // ... existing code ...
   const contextMessages = [
     { role: 'system' as const, content: '你是一个专业的 AI 助手，擅长编程、技术分析和问题解答。请用 Markdown 格式回复。' },
     ...(historyMessages ?? []).map((m: { role: string; content: string }) => ({
@@ -111,7 +119,7 @@ export default defineEventHandler(async (event) => {
           }
         }
         catch {
-          // 跳过格式异常的 chunk，不静默吞没 —— 这是预期内的 SSE 解析容错
+          // 跳过格式异常的 chunk
         }
       }
     }
@@ -120,17 +128,18 @@ export default defineEventHandler(async (event) => {
     await writer.close()
   }
 
-  // 将完整 AI 回复存入数据库
+  // 将完整 AI 回复存入数据库，user_id 由数据库自动填充
   if (fullContent.trim()) {
     await db.from('messages').insert([
       { role: 'assistant', content: fullContent, conversation_id: conversationId },
     ])
 
-    // 如果是对话的首条回复，用内容摘要更新对话标题
+    // 如果是对话的首条回复，用内容摘要更新对话标题，加入 user_id 校验
     const { count } = await db
       .from('messages')
       .select('*', { count: 'exact', head: true })
       .eq('conversation_id', conversationId)
+      .eq('user_id', user.id)
 
     if (count && count <= 2) {
       const autoTitle = prompt.slice(0, 50).replace(/\n/g, ' ')
@@ -138,6 +147,7 @@ export default defineEventHandler(async (event) => {
         .from('conversations')
         .update({ title: autoTitle })
         .eq('id', conversationId)
+        .eq('user_id', user.id)
     }
   }
 })

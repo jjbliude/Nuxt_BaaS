@@ -72,6 +72,14 @@ function groupConversations(list: Conversation[]) {
 }
 
 const groups = computed(() => groupConversations(props.conversations))
+
+const user = useSupabaseUser()
+const supabase = useSupabaseClient()
+
+async function handleLogout() {
+  await supabase.auth.signOut()
+  navigateTo('/login')
+}
 </script>
 
 <template>
@@ -128,6 +136,19 @@ const groups = computed(() => groupConversations(props.conversations))
       <div v-if="conversations.length === 0" style="padding: 24px 12px; text-align: center; color: var(--chat-text-muted); font-size: 13px;">
         暂无对话记录
       </div>
+    </div>
+
+    <!-- 用户信息与登出 -->
+    <div v-if="user" class="chat-sidebar-footer">
+      <div class="chat-user-info">
+        <div class="chat-user-avatar">{{ user.email?.[0].toUpperCase() }}</div>
+        <div class="chat-user-details">
+          <div class="chat-user-email">{{ user.email }}</div>
+        </div>
+      </div>
+      <button class="chat-logout-btn" title="登出" @click="handleLogout">
+        🚪
+      </button>
     </div>
   </aside>
 </template>

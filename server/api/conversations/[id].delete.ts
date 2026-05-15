@@ -1,6 +1,12 @@
-import { serverSupabaseClient } from '#supabase/server'
+import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
+  const user = await serverSupabaseUser(event)
+  if (!user) {
+    throw createError({ statusCode: 401, message: '未认证' })
+  }
+  const userId = user.id || (user as any).sub || (user as any).user?.id || (user as any).value?.id;
+
   const db = await serverSupabaseClient(event)
   const conversationId = getRouterParam(event, 'id')
 
@@ -12,6 +18,7 @@ export default defineEventHandler(async (event) => {
     .from('conversations')
     .delete()
     .eq('id', conversationId)
+    .eq('user_id', userId)
 
   if (error) {
     throw createError({ statusCode: 500, message: error.message })
